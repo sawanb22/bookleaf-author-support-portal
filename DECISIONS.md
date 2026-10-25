@@ -1,6 +1,26 @@
 # Architectural Decision Records (ADR) — BookLeaf Author Support Portal
 
-Single-line architectural decision defenses for key engineering, security, data, and design choices across Gates 1–8:
+## Core 5 Engineering Defenses for Technical Interviews
+
+1. **Database-Enforced Financial Invariants vs. Application Code**:
+   * *Decision*: The constraint `chk_royalty_balance` (`total_royalty_earned - royalty_paid = royalty_pending`) is enforced directly in PostgreSQL schema.
+   * *Defense*: Application-level validation can fail under concurrent race conditions or bug regressions. Putting the invariant in the PostgreSQL engine guarantees mathematical ledger integrity at the storage layer regardless of what API or background worker touches it.
+2. **Multi-Tenant Data Isolation (404 Not Found vs. 403 Forbidden)**:
+   * *Decision*: Querying a ticket or book that belongs to another author returns `404 Not Found`, never `403 Forbidden`.
+   * *Defense*: Returning 403 leaks that a private resource exists, enabling ID enumeration and timing attacks. Returning 404 maintains strict zero-knowledge tenant isolation.
+3. **In-Context Policy Injection vs. Vector RAG**:
+   * *Decision*: The entire BookLeaf operational publishing policy (~1,500 tokens) is injected directly into the LLM system prompt without vector search.
+   * *Defense*: RAG introduces chunking miss rates, vector similarity cutoffs, and embedding roundtrip latency. Because the policy is compact, direct injection achieves 100% recall, 0ms retrieval latency, and zero chunk hallucinations for < $0.0008 per ticket.
+4. **Deterministic Priority Floors & Circuit Breakers**:
+   * *Decision*: Hardcoded regex keyword rules override LLM priority predictions for legal threats and multi-quarter payout delays. A circuit breaker trips after 5 downstream failures.
+   * *Defense*: LLMs should assist staff, not govern legal or financial risk. If an author mentions consumer court, the priority must be Critical 100% of the time, even if the model hallucinates a Medium. If Bedrock goes down, the circuit breaker protects API latency by degrading to deterministic rule triage.
+5. **Composite Foreign Key Authorization Boundary**:
+   * *Decision*: Database foreign key `tickets_book_owner_fk` spans `(book_id, author_id)`.
+   * *Defense*: Prevents IDOR (Insecure Direct Object Reference) vulnerabilities at the database layer: an author cannot file a ticket against a book ID they do not own, even if they tamper with client-side dropdown requests.
+
+---
+
+## Complete Systems Decision Reference (Gates 1–8)
 
 1. **Neon Serverless PostgreSQL with asyncpg Pool**: Selected for zero cold-start pooled connections, ACID compliance, and native PostgreSQL constraint enforcement at serverless scale.
 2. **Argon2id Password Hashing**: Selected over bcrypt/PBKDF2 to resist GPU/ASIC parallel cracking while meeting modern cryptographic storage standards.
