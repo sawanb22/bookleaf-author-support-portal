@@ -1,0 +1,263 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* =========================================================================
+     Core Canvas & Surface Colors
+     ========================================================================= */
+  --color-page: #F5F7F6;            /* Warm unbleached paper background */
+  --color-surface: #FFFFFF;         /* Pure white cards, inputs, table body */
+  --color-surface-sunken: #EDF1EF;  /* Headers, sunken panels, disabled fields */
+  --color-surface-dim: #D8DAD9;     /* Subtle muted surface border/fill */
+  --color-surface-bright: #F8FAF9;  /* Elevated subtle highlight surface */
+  --color-border: #DDE2DF;          /* Standard 1px divider and field border */
+  --color-border-strong: #C3CBC6;   /* Hover border, dropzone outline, checkbox */
+
+  /* =========================================================================
+     Typography & Inks (Never pure #000000)
+     ========================================================================= */
+  --color-text: #18211D;            /* Dark forest ink with green undertone */
+  --color-text-muted: #55625B;      /* Secondary captions (6.4:1 contrast on white) */
+  --color-text-subtle: #66726B;     /* Placeholders, disabled text (5.0:1 contrast) */
+
+  /* =========================================================================
+     Primary Interactive Palette (Publishing Deep Leaf Green)
+     ========================================================================= */
+  --color-primary: #1B6B4F;         /* 6.4:1 contrast on white */
+  --color-primary-hover: #145740;   /* Button hover state */
+  --color-primary-pressed: #0F4733; /* Button active/pressed state */
+  --color-primary-tint: #E6F1EC;    /* Active tab pill, official reply background */
+  --color-on-primary: #FFFFFF;      /* Text on primary buttons */
+
+  /* =========================================================================
+     Semantic Alerts & AI Indicators
+     ========================================================================= */
+  --color-danger: #B42318;          /* Form errors, destructive buttons */
+  --color-danger-tint: #FDECEA;     /* Error banner background */
+  --color-ai: #1E4F8C;              /* Steel blue AI draft marker (never purple) */
+  --color-ai-tint: #E7EFFA;         /* AI draft banner and card background */
+  --color-secondary: #325F9D;       /* Admin queue secondary operational blue */
+
+  /* =========================================================================
+     Ticket Status Color Pairs (WCAG AA Compliant)
+     ========================================================================= */
+  --status-open-text: #1E4F8C;
+  --status-open-bg: #E7EFFA;
+  --status-progress-text: #7A4B00;
+  --status-progress-bg: #FBF0D9;
+  --status-resolved-text: #1B6B4F;
+  --status-resolved-bg: #E6F1EC;
+  --status-closed-text: #4A5550;
+  --status-closed-bg: #E8ECEA;
+
+  /* =========================================================================
+     Priority 4-Bar Color Pairs
+     ========================================================================= */
+  --priority-critical-text: #9B1C1C;
+  --priority-critical-bg: #FBE9E7;
+  --priority-high-text: #A5420A;
+  --priority-high-bg: #FDEBDD;
+  --priority-medium-text: #18211D;
+  --priority-medium-bg: #E8ECEA;
+  --priority-low-text: #55625B;
+  --priority-low-border: #C3CBC6;
+
+  /* =========================================================================
+     Book Production Status Pairs
+     ========================================================================= */
+  --book-live-text: #1B6B4F;
+  --book-live-bg: #E6F1EC;
+  --book-prod-text: #7A4B00;
+  --book-prod-bg: #FBF0D9;
+
+  /* =========================================================================
+     Component Radii & Spacing Grid (4px Base)
+     ========================================================================= */
+  --radius-sm: 4px;                 /* Badges, chips, status pills */
+  --radius-md: 6px;                 /* Inputs, buttons, panels, message cards */
+  --radius-lg: 10px;                /* Dialogs, popovers, toasts only */
+
+  /* =========================================================================
+     Elevation & Overlays (No shadows on page content)
+     ========================================================================= */
+  --shadow-overlay: 0 8px 24px rgba(24, 33, 29, 0.14);
+  --backdrop-dialog: rgba(24, 33, 29, 0.4);
+
+  /* =========================================================================
+     Accessible Focus Ring Tokens
+     ========================================================================= */
+  --focus-ring-color: #1B6B4F;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+}
+
+/* =========================================================================
+   Global Base Layer: Focus Rings & Typographic Defaults
+   ========================================================================= */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-page);
+    color: var(--color-text);
+    font-family: var(--font-ibm-plex), system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Universal Accessible Focus Ring for Keyboard Users */
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* Remove default outline on mouse pointer click if not keyboard navigation */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* High Contrast / Forced Colors Mode Support */
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+
+  /* Accessible Screen Reader Utility */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
+
+/* =========================================================================
+   Tabular Numerals & Figure Formatting
+   ========================================================================= */
+.tabular-nums,
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+  -moz-font-feature-settings: "tnum";
+  -webkit-font-feature-settings: "tnum";
+  font-feature-settings: "tnum";
+}
+
+/* =========================================================================
+   Compound Typography Utilities (Matching Stitch Prototype Usage)
+   ========================================================================= */
+@layer utilities {
+  .font-title-page {
+    font-family: var(--font-literata), Georgia, serif;
+    font-size: 28px;
+    line-height: 36px;
+    font-weight: 600;
+  }
+
+  .font-title-page-mobile {
+    font-family: var(--font-literata), Georgia, serif;
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+  }
+
+  .font-title-section {
+    font-family: var(--font-literata), Georgia, serif;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+  }
+
+  .font-title-book {
+    font-family: var(--font-literata), Georgia, serif;
+    font-size: 18px;
+    line-height: 26px;
+    font-weight: 600;
+  }
+
+  .font-body-lg {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 26px;
+    font-weight: 400;
+  }
+
+  .font-body {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 22px;
+    font-weight: 400;
+  }
+
+  .font-label {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+  }
+
+  .font-caption {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+
+  .font-figure {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-figure-lg {
+    font-family: var(--font-ibm-plex), system-ui, sans-serif;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .focus-ring {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+
+/* =========================================================================
+   Respect Reduced Motion Preferences
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

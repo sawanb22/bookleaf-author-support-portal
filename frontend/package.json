@@ -1,0 +1,40 @@
+{
+  "name": "bookleaf-portal",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint",
+    "test:contracts": "tsx tests/verify-contracts.ts",
+    "test:e2e": "npx.cmd playwright test",
+    "test": "tsx tests/verify-contracts.ts && npx.cmd playwright test"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5",
+    "@neondatabase/serverless": "^1.2.0",
+    "clsx": "^2.1.1",
+    "jose": "^6.2.13",
+    "lucide-react": "^0.454.0",
+    "next": "^14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.2",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.9",
+    "@types/node": "^20.17.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3"
+  }
+}
