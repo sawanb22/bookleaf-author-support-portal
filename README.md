@@ -1,6 +1,6 @@
 # BookLeaf Author Support Portal
 
-A production-grade, full-stack Author Support Portal and AI-assisted Admin Triage System built for BookLeaf Publishing, unifying real-time support ticketing, relational royalty accounting, and policy-grounded LLM response assistance.
+A full-stack author support portal and admin triage desk built for BookLeaf Publishing. It connects authors with publishing staff to manage tickets, track retail distribution and royalties across platforms, and draft context-aware support responses with an LLM assistant.
 
 * **Frontend Application**: [http://localhost:3000](http://localhost:3000) *(Production: [https://bookleaf-portal.vercel.app](https://bookleaf-portal.vercel.app))*
 * **Backend API**: [http://localhost:8000](http://localhost:8000) *(Production: [https://bookleaf-api.onrender.com](https://bookleaf-api.onrender.com))*
@@ -10,28 +10,28 @@ A production-grade, full-stack Author Support Portal and AI-assisted Admin Triag
 
 ## 1. Demo Logins
 
-All accounts use the password **`demo`** (hashed using Argon2id).
+All demo accounts share the password **`demo`** (hashed with Argon2id).
 
-| Role | Name | Email (Login) | Test Scenario & Persona Focus |
+| Role | Name | Email (Login) | Test Persona Focus |
 | :--- | :--- | :--- | :--- |
-| **Author** | Priya Sharma (`AUTH001`) | `priya.sharma@email.com` | 2 live books (*The Saffron Diaries*, *Whispers of the Ganges*). Payout eligible: ₹19,908 earned, ₹16,338 paid, ₹3,570 pending. |
-| **Author** | Kavita Deshmukh (`AUTH009`) | `kavita.deshmukh@email.com` | 1 live book + 1 in Typesetting (*Raising Roots*). ₹850 pending triggers automated ₹1,000 threshold roll-over policy. |
-| **Admin** | Ops Admin | `ops.admin@bookleaf.demo` | Operations staff: Complete triage queue, urgent escalations, ticket reassignment, and status management. |
-| **Admin** | Support Lead | `support.lead@bookleaf.demo` | Support lead: Operational KPI counters, AI draft review/editing, and internal staff notes. |
+| **Author** | Priya Sharma (`AUTH001`) | `priya.sharma@email.com` | Has 2 published live titles (*The Saffron Diaries*, *Whispers of the Ganges*). Payout eligible: ₹19,908 earned, ₹16,338 paid, ₹3,570 pending. |
+| **Author** | Kavita Deshmukh (`AUTH009`) | `kavita.deshmukh@email.com` | Has 1 live title + 1 manuscript in typesetting (*Raising Roots*). Pending balance of ₹850 triggers the ₹1,000 minimum threshold rollover policy. |
+| **Admin** | Ops Admin | `ops.admin@bookleaf.demo` | Operations team: Full access to the global triage queue, urgency sorting, ticket reassignments, and status updates. |
+| **Admin** | Support Lead | `support.lead@bookleaf.demo` | Support leadership: Real-time operational KPI metrics, AI draft review/editing, and internal staff notes. |
 
-> **Note on All Seeded Authors**: 10 canonical author accounts (`AUTH001`–`AUTH010`, e.g., `rohit.kapoor@email.com`, `sneha.kulkarni@email.com`) are fully seeded with their books, retail channels, and royalty balances. Password for all accounts is `demo`.
+> **All Seeded Authors**: 10 author accounts (`AUTH001`–`AUTH010`, including `rohit.kapoor@email.com` and `sneha.kulkarni@email.com`) are fully seeded with their respective books, retail distribution links, and royalty records. All use password `demo`.
 > 
-> **Cold Starts**: On free-tier cloud hosting (Render / Neon serverless compute suspend), the backend may require ~45–60 seconds to spin up on the initial request. Subsequent requests are immediate.
+> **Cold Starts**: If viewing on free-tier hosting (Render / Neon serverless compute suspend), the backend may take roughly 45–60 seconds to wake up on the first request. Subsequent interactions are immediate.
 
 ---
 
 ## 2. What It Does
 
-1. **Author Catalog & Royalties**: Authors inspect retail links across Amazon India, Flipkart, Kindle, Google Books, and track live royalties where `Earned - Paid == Pending`.
-2. **Contextual Ticket Filing**: Authors file support inquiries linked strictly to their contracted books across Royalties, Distribution, Author Copies, and Production.
-3. **Synchronized Conversation Thread**: Authors and staff communicate in real time with Server-Sent Events (SSE) and zero page reloads.
-4. **Admin Triage & Priority Desk**: Support staff prioritize tickets via operational KPI cards (`Needs First Reply`, `Critical Escalations`), priority glyphs, and assignee filters.
-5. **AI Assistant & Response Drafts**: An LLM agent triages tickets asynchronously, enforcing priority floors and synthesizing grounded draft responses for 1-click staff review.
+1. **Author Catalog & Royalties**: Authors view live retail links across Amazon India, Flipkart, Kindle, Google Books, and track royalties with verified accounting where `Earned - Paid == Pending`.
+2. **Context-Linked Ticketing**: Authors file tickets tied directly to their contracted titles across Royalties, Retail Distribution, Author Copies, and Production Milestones.
+3. **Synchronized Conversation Thread**: Real-time communication between authors and staff powered by Server-Sent Events (SSE) with clean updates and zero page refreshes.
+4. **Admin Triage & Operations Desk**: Support agents manage incoming volume with KPI counters (`Total in Queue`, `Needs First Reply`, `Critical Escalations`), priority glyphs, and status filters.
+5. **AI Assistant & Draft Synthesis**: An asynchronous LLM agent triages incoming queries, applies deterministic safety floors, and synthesizes structured draft replies with author-specific financial calculations for 1-click staff review.
 
 ### Interface Overview
 
@@ -80,72 +80,100 @@ flowchart TD
     TriageEngine -->|Direct Mantle Chat API| Bedrock
 ```
 
-### Core Architectural Decisions & Interview Defenses
+### Tech Stack at a Glance
 
-Full decision defenses are detailed in [Architectural Decision Records (`DECISIONS.md`)](DECISIONS.md):
+| Layer | Choice | Why We Chose It |
+| :--- | :--- | :--- |
+| **Frontend** | **Next.js 14 (App Router)** | Strict TypeScript typing, separate route groups for `(author)` and `admin`, and fast server-side rendering without layout flicker. |
+| **Styling** | **Tailwind CSS + Lucide Icons** | Custom editorial theme (forest green `#1E3A2F`, parchment `#F7F5EE`), tabular numeral formatting (`tabular-nums`) for currency tables, and clean accessibility contrast. |
+| **Backend** | **FastAPI (Python 3.10+)** | High-throughput asynchronous routing with `asyncpg`, strict Pydantic v2 contract validation with `extra='forbid'`, and automatic OpenAPI documentation. |
+| **Database** | **Neon PostgreSQL** | Cloud-native serverless PostgreSQL with pooled connections, ACID compliance, and schema-enforced relational integrity. |
+| **AI / LLM** | **AWS Bedrock Mantle (`minimax.minimax-m2.5`)** | High inference speed, solid grasp of Indian publishing context, and reliable JSON schema compliance. |
+| **Auth** | **Argon2id + JWT** | Memory-hard password hashing (RFC 9106) resistant to GPU cracking, paired with stateless 24-hour Bearer tokens. |
 
-1. **Database-Enforced Financial Invariants vs. Application Code**:
-   * *Decision*: The constraint `chk_royalty_balance` (`total_royalty_earned - royalty_paid = royalty_pending`) is enforced directly in PostgreSQL schema.
-   * *Interview Defense*: Application validation can fail under race conditions or bugs. Placing the invariant at the storage engine level guarantees ledger integrity regardless of the API caller.
-2. **Multi-Tenant Data Isolation (404 Not Found vs. 403 Forbidden)**:
-   * *Decision*: Querying another author's ticket returns `404 Not Found`, never `403 Forbidden`.
-   * *Interview Defense*: Returning 403 leaks that a private resource exists, enabling ID enumeration and timing attacks. 404 maintains strict zero-knowledge isolation.
-3. **In-Context Policy Injection vs. Vector RAG**:
-   * *Decision*: The entire BookLeaf policy (~1,500 tokens) is injected directly into the LLM system prompt without vector search.
-   * *Interview Defense*: RAG introduces chunk truncation, similarity threshold tuning, and retrieval latency. Because our operational policy is compact, direct injection achieves 100% recall, 0ms retrieval latency, and zero chunk hallucinations at < $0.0008 per ticket.
-4. **Deterministic Priority Floors & Circuit Breakers**:
-   * *Decision*: Hardcoded regex keyword rules override LLM priority predictions for legal threats and multi-quarter payout delays. A circuit breaker trips after 5 downstream failures.
-   * *Interview Defense*: LLMs should assist staff, not govern legal or financial risk. If an author mentions court action, priority must be Critical 100% of the time. The circuit breaker protects API latency during provider outages.
-5. **Composite Foreign Key Authorization Boundary**:
-   * *Decision*: Database foreign key `tickets_book_owner_fk` spans `(book_id, author_id)`.
-   * *Interview Defense*: Enforces relational tenant boundaries in SQL, preventing Insecure Direct Object Reference (IDOR) attacks even if client payloads are forged.
+### Engineering Decisions & Trade-offs
+
+* **Database Constraints over App-Level Validation for Financial Integrity**:
+  Rather than relying solely on FastAPI or client logic to maintain royalty balance consistency, we placed a SQL check constraint (`chk_royalty_balance: total_royalty_earned - royalty_paid = royalty_pending`) directly on the `books` table schema. Even if a batch migration, worker script, or background job writes to book rows, the financial math cannot drift or become inconsistent.
+* **Why In-Context Policy Injection Instead of Vector RAG**:
+  BookLeaf's publishing guidelines, royalty schedules, copy replacement policies, and 9-stage production milestones fit into roughly 1,500 tokens. Setting up a vector database with chunking would introduce retrieval miss rates, similarity cutoff tuning, and extra roundtrip latency for zero upside. In-context injection guarantees 100% policy recall on every invocation, 0ms retrieval latency, and zero hallucinated policy clauses for less than $0.0008 per ticket.
+* **Deterministic Priority Floors Over Unchecked LLM Triage**:
+  While the model reliably handles categorization and empathetic drafts, an LLM should never be the sole authority on legal or financial risk. We put deterministic regex rules in front of the model: mentions of consumer court, legal notices, or multiple overdue quarters automatically pin the ticket to `Critical` priority, overriding whatever the model returns. If AWS Bedrock experiences an outage, an in-memory circuit breaker trips after 5 failures and falls back to local rule-based triage so author support never stalls.
+* **Zero-Knowledge Multi-Tenant Isolation (404 instead of 403)**:
+  When an author queries a ticket or book that belongs to someone else, the API returns `404 Not Found` rather than `403 Forbidden`. Returning a 403 confirms to an unauthorized user that a given ID exists, opening the door to ID enumeration and timing attacks. 404 treats foreign resources as non-existent.
+* **Composite Foreign Keys for IDOR Prevention**:
+  To prevent Insecure Direct Object Reference (IDOR) attacks, the `tickets` table uses a composite foreign key on `(book_id, author_id)` referencing the `books` table. This guarantees in the database engine that an author can only open tickets against titles they legally own—even if someone tampers with client requests in dev tools.
+
+*(See [`DECISIONS.md`](DECISIONS.md) for the complete list of 20 Architectural Decision Records).*
 
 ---
 
 ## 4. AI Integration
 
-* **Model**: **MiniMax M2.5** (`minimax.minimax-m2.5`) via AWS Bedrock Mantle Endpoint.
-* **Selection Rationale**: Strong comprehension of Indian publishing context and financial terms (NEFT, royalty schedules), reliable structured JSON output compliance, and automatic isolation of `<think>...</think>` reasoning tokens before schema validation.
+The AI engine handles automated ticket classification, priority routing, and grounded draft response generation.
 
-### Knowledge Base & Prompt Strategy (Why No RAG?)
-* **In-Context Injection**: Compact ~1,500 token knowledge base injected directly with live author ledger facts.
-* **Structured Response Formatting**: The system prompt deterministically formats responses into 5 paragraphs separated by double-newlines (`\n\n`): formal salutation, empathetic context, factual ledger breakdown, next steps/timeline, and publishing team sign-off.
+### Model Choice & Practical Rationale
+
+* **Provider & Model**: AWS Bedrock Mantle Endpoint running **MiniMax M2.5** (`minimax.minimax-m2.5`).
+* **Why this model**:
+  1. **Indian Publishing Nuances**: Accurately interprets regional phrasing, Indian banking cycles (NEFT schedules, quarterly disbursements), and author grievances without confusion.
+  2. **Structured JSON Compliance**: Follows Pydantic schemas consistently for classification output (`category`, `priority`, `confidence`, `reasoning`).
+  3. **Reasoning Extraction**: Isolates and strips `<think>...</think>` cognitive traces cleanly before JSON parsing, avoiding parse crashes.
+  4. **Cost & Throughput**: High inference speed with low token pricing, making it sustainable for high-volume customer support.
+
+### Prompt Strategy & Structured Formatting
+
+* **In-Context Grounding**: The system prompt injects BookLeaf publishing rules along with the specific author's financial ledger directly into the LLM context.
+* **Structured Response Formatting**: The prompt enforces a professional 5-part layout separated by double-newlines (`\n\n`):
+  1. Formal personal salutation (`Dear {Author},`)
+  2. Empathetic context acknowledgment
+  3. Factual ledger breakdown with verified math
+  4. Next steps / expected timeline
+  5. Publishing team sign-off
 
 ### Cost & Real Token Consumption
-* **Triage (Classification)**: ~650 input tokens, ~85 output tokens (~**$0.00022 USD**).
-* **Draft Generation**: ~1,450 input tokens, ~280 output tokens (~**$0.00052 USD**).
-* **Total Lifecycle Cost**: < **$0.0008 USD** per ticket.
-* **Token-Saving UI**: Drafts are cached in PostgreSQL `tickets.ai_draft` and React state. Clicking **"Hide Draft"** collapses the assist box; expanding it with **"View Suggested Response"** costs **0 tokens and 0 API calls**.
+
+| Operation | Input Tokens (Avg) | Output Tokens (Avg) | Total Tokens | Estimated Cost / Call |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ticket Triage (Classification)** | ~650 tokens | ~85 tokens | ~735 tokens | **$0.00022 USD** |
+| **Draft Response Synthesis** | ~1,450 tokens | ~280 tokens | ~1,730 tokens | **$0.00052 USD** |
+| **Full Lifecycle per Ticket** | ~2,100 tokens | ~365 tokens | ~2,465 tokens | **< $0.0008 USD** |
+
+* **Zero-Token UI Draft Toggling**: Generated AI drafts are cached in PostgreSQL (`tickets.ai_draft`) and React state. When an agent clicks **"Hide Draft"**, the box collapses into a non-destructive bar. Clicking **"View Suggested Response"** re-expands the draft instantly with **0 API requests and 0 token expenditure**.
 
 ### Error Handling & Guardrails
-* **Circuit Breaker**: Trips after 5 consecutive Bedrock errors for 60s, instantly routing requests to local rule-based triage.
-* **Timeouts**: 30s classification SLA, 45s draft generation SLA.
+
+* **Circuit Breaker**: Monitored in memory. If Bedrock Mantle returns 5 consecutive errors, the circuit trips open for 60 seconds, immediately routing incoming tickets to local deterministic rule-based triage without incurring network timeouts.
+* **Timeouts**: 30-second classification SLA; 45-second draft generation SLA.
 * **Priority Floors**:
-  * Legal escalation / court / lawyer $\rightarrow$ **Critical** (deterministic override).
+  * Legal escalation / consumer court / lawyer $\rightarrow$ **Critical** (deterministic override).
   * Two or more overdue quarterly royalty payout cycles $\rightarrow$ **Critical**.
-  * Damaged author copies / ISBN mismatch / live title unavailable $\rightarrow$ **High**.
-* **Financial Fact-Checker**: Draft responses citing monetary figures are cross-checked against author's DB balance (`earned - paid == pending`) and the ₹1,000 threshold. Discrepancies are flagged as `ai_draft_unverified`.
-* **Human-in-the-Loop**: Drafts never auto-send; agents review, edit, and send via a 1-click **"Apply to Editor"** button.
+  * Damaged / misprinted author copies or ISBN mismatch $\rightarrow$ **High**.
+  * Published title showing "Currently Unavailable" on retail channels $\rightarrow$ **High**.
+* **Financial Fact-Checker**: Draft responses citing monetary figures are scanned via regex and verified against the author's database facts (`earned - paid == pending`) and the ₹1,000 threshold. Any unverified currency figure automatically flags the draft as `ai_draft_unverified` for mandatory admin review.
+* **Human-in-the-Loop Safety**: AI drafts are never sent directly to authors. Drafts populate an admin assist drawer with a 1-click **"Apply to Editor"** button, allowing staff to review and adjust tone before submission.
 
 ### Evaluation Benchmark (7 Canonical Inquiries)
 
-| # | Inquiry | Expected Category | Priority | Result | Policy / Math Verification | Status |
+| # | Inquiry Prompt | Expected Category | Expected Priority | Model Triage Result | Policy / Math Verification | Status |
 | :-: | :--- | :--- | :--- | :--- | :--- | :-: |
-| 1 | *"When will I receive my Q3 royalties?"* | `royalty_inquiry` | `Medium` | Match | Explains quarterly payout schedule | **PASS** |
-| 2 | *"My book shows Out of Stock on Amazon India!"* | `distribution_issue` | `High` | Match | Priority floor applied; cites retail sync window | **PASS** |
-| 3 | *"I will take BookLeaf to consumer court for unpaid money!"* | `legal_escalation` | `Critical` | Match | Legal priority floor applied immediately | **PASS** |
-| 4 | *"The 10 author copies arrived with torn covers and misaligned spines."* | `author_copies` | `High` | Match | Quality priority floor applied; requests photo proof | **PASS** |
-| 5 | *"When will my book move from typesetting to proofreading?"* | `production_status` | `Medium` | Match | Correctly references stage 4 of 9-stage tracker | **PASS** |
-| 6 | *"My pending royalty is ₹850. Why wasn't it sent to my account?"* | `royalty_inquiry` | `Medium` | Match | Cites ₹1,000 threshold roll-over rule | **PASS** |
-| 7 | *"Can I change my retail price on Flipkart to ₹399?"* | `metadata_update` | `Low` | Match | Explains retail metadata distribution lead time | **PASS** |
+| **1** | *"When will I receive my Q3 royalties?"* | `royalty_inquiry` | `Medium` | `royalty_inquiry` / `Medium` | Accurately explains quarterly payout schedule | **PASS** |
+| **2** | *"My book shows Out of Stock on Amazon India!"* | `distribution_issue` | `High` | `distribution_issue` / `High` | Priority floor applied; cites retail sync window | **PASS** |
+| **3** | *"I will take BookLeaf to consumer court for unpaid money!"* | `legal_escalation` | `Critical` | `legal_escalation` / `Critical` | Legal priority floor applied immediately | **PASS** |
+| **4** | *"The 10 author copies arrived with torn covers and misaligned spines."* | `author_copies` | `High` | `author_copies` / `High` | Quality priority floor applied; requests photos | **PASS** |
+| **5** | *"When will my book move from typesetting to proofreading?"* | `production_status` | `Medium` | `production_status` / `Medium` | Correctly references stage 4 of 9-stage tracker | **PASS** |
+| **6** | *"My pending royalty is ₹850. Why wasn't it sent to my account?"* | `royalty_inquiry` | `Medium` | `royalty_inquiry` / `Medium` | Cites ₹1,000 threshold roll-over rule | **PASS** |
+| **7** | *"Can I change my retail price on Flipkart to ₹399?"* | `metadata_update` | `Low` | `metadata_update` / `Low` | Explains retail metadata distribution lead time | **PASS** |
 
-**Benchmark Score**: **7/7 (100% accuracy, 100% priority floor enforcement)**.
+**Benchmark Score**: **7/7 (100% classification accuracy, 100% priority floor enforcement, 100% policy compliance)**.
 
 ---
 
 ## 5. API Documentation
 
-Interactive OpenAPI documentation is live at [`/docs`](http://localhost:8000/docs) and [`/redoc`](http://localhost:8000/redoc).
+Interactive API documentation is generated automatically by FastAPI:
+* **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ### Core Endpoints
 
@@ -165,8 +193,11 @@ Interactive OpenAPI documentation is live at [`/docs`](http://localhost:8000/doc
 | `GET` | `/api/v1/events/stream` | Auth | Server-Sent Events stream for real-time ticket updates. |
 | `GET` | `/health` / `/health/ready` | Public | Liveness and database connection readiness probes. |
 
-* **Auth Model**: Stateless HTTP `Authorization: Bearer <token>` signed via `HS256` with 24h expiration.
-* **Error Format (RFC 7807)**:
+### Auth Model & Error Format
+
+* **Authentication**: Standard HTTP `Authorization: Bearer <token>` header with signed `HS256` token (24-hour expiration) carrying user ID and role claims.
+* **Error Format**: All errors adhere to standard RFC 7807 problem details:
+
 ```json
 {
   "type": "https://bookleaf.pub/errors/validation_error",
@@ -181,13 +212,13 @@ Interactive OpenAPI documentation is live at [`/docs`](http://localhost:8000/doc
 
 ## 6. Data Model
 
-Database schema is defined in [`backend/app/db/schema.sql`](backend/app/db/schema.sql):
+The schema is maintained in [`backend/app/db/schema.sql`](backend/app/db/schema.sql) and runs on PostgreSQL 15+.
 
-* **Entities**: `users` (credentials), `authors` (profiles), `books` (titles and royalty ledgers), `book_platforms` (retail links), `tickets` (support records), `ticket_messages` (conversation thread), `ticket_events` (audit log).
-* **Engine Invariants**:
+* **Core Tables**: `users` (credentials and roles), `authors` (profiles), `books` (metadata and financial ledgers), `book_platforms` (retail links), `tickets` (support records), `ticket_messages` (conversation history), `ticket_events` (audit log).
+* **Key Constraints**:
   * `chk_royalty_balance`: `(total_royalty_earned - royalty_paid = royalty_pending)` on `books`.
-  * `tickets_book_owner_fk`: Composite FK `(book_id, author_id)` preventing cross-author ticket creation.
-* **Seeding Pipeline**: [`backend/scripts/seed_canonical.py`](backend/scripts/seed_canonical.py) reads [`backend/bookleaf_sample_data.json`](backend/bookleaf_sample_data.json) idempotently. Populates 10 authors, 2 admins, 18 books, and 46 retail platform records, leaving the ticket queue in a pristine 0-ticket state for fresh testing.
+  * `tickets_book_owner_fk`: Composite FK `(book_id, author_id)` on `tickets`.
+* **Idempotent Seeding**: [`backend/scripts/seed_canonical.py`](backend/scripts/seed_canonical.py) parses [`backend/bookleaf_sample_data.json`](backend/bookleaf_sample_data.json), seeding 10 authors, 2 admins, 18 books, and 46 retail distribution rows, leaving the ticket queue in a clean 0-ticket state for fresh testing.
 
 ---
 
@@ -195,7 +226,7 @@ Database schema is defined in [`backend/app/db/schema.sql`](backend/app/db/schem
 
 ### Prerequisites
 * Python 3.10+
-* Node.js 18+ & npm
+* Node.js 18+ (LTS) & npm
 * PostgreSQL 15+ (Local Docker or Neon)
 
 ### Environment Setup
@@ -208,11 +239,11 @@ cp frontend/.env.example frontend/.env.local
 | Variable | Target | Purpose | Example |
 | :--- | :--- | :--- | :--- |
 | `DATABASE_URL` | Backend | PostgreSQL pooled connection string | `postgresql://user:pass@ep-sample-pooler.neon.tech/neondb?sslmode=require` |
-| `JWT_SECRET` | Backend | Cryptographic secret for signing JWTs | `bookleaf-secure-secret-key-32chars-minimum` |
-| `AI_PROVIDER` | Backend | AI provider toggle (`bedrock` or `mock`) | `bedrock` |
-| `BEDROCK_MODEL_ID` | Backend | Foundation model ID | `minimax.minimax-m2.5` |
-| `AWS_BEARER_TOKEN_BEDROCK` | Backend | AWS Bedrock Mantle bearer token | `your-token` |
-| `NEXT_PUBLIC_API_URL` | Frontend | Backend API base URL consumed by browser | `http://localhost:8000` |
+| `JWT_SECRET` | Backend | Secret key used for signing JWT tokens | `bookleaf-secure-secret-key-32chars-minimum` |
+| `AI_PROVIDER` | Backend | AI backend selection (`bedrock` or `mock`) | `bedrock` |
+| `BEDROCK_MODEL_ID` | Backend | Foundation model identifier | `minimax.minimax-m2.5` |
+| `AWS_BEARER_TOKEN_BEDROCK` | Backend | Bearer token for AWS Bedrock Mantle | `your-token` |
+| `NEXT_PUBLIC_API_URL` | Frontend | Base backend URL consumed by browser | `http://localhost:8000` |
 
 ### Quick Start Commands
 
@@ -232,25 +263,25 @@ npm install
 npm run dev
 ```
 
-App will be live at `http://localhost:3000` with backend API at `http://localhost:8000`.
+The frontend will run on `http://localhost:3000` with the backend API on `http://localhost:8000`.
 
 ---
 
 ## 8. Deployment
 
-* **Frontend (Vercel)**: Connect repo, set root directory to `frontend`, add `NEXT_PUBLIC_API_URL`, deploy.
-* **Backend (Render / Railway)**: Create Web Service pointing to `backend`, set Python 3 runtime, build command `pip install -r requirements.txt`, start command `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`, add backend environment variables.
-* **Database (Neon PostgreSQL)**: Serverless PostgreSQL with pooling enabled; run `python scripts/seed_canonical.py` to initialize tables and canonical data.
-* **Redeploy**: Pushes to `main` trigger automated preview/production re-builds on Vercel and Render.
+* **Frontend (Vercel)**: Connect the GitHub repository, set root directory to `frontend`, add `NEXT_PUBLIC_API_URL`, and deploy.
+* **Backend (Render / Railway)**: Create a Web Service pointing to `backend`, select Python 3, build command `pip install -r requirements.txt`, start command `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and configure backend environment variables.
+* **Database (Neon PostgreSQL)**: Serverless PostgreSQL with connection pooling enabled. Run `python scripts/seed_canonical.py` to initialize tables and seed data.
+* **Redeployment**: Pushing commits to `main` triggers automated builds and rolling deployments on Vercel and Render.
 
 ---
 
 ## 9. Assumptions
 
-1. **Accounting Snapshot**: March 2024 fiscal cut-off; historical sales figures reflect platform receipts up to this date.
-2. **₹1,000 Payout Minimum**: Evaluated across an author's **aggregate** pending balance across all their books. Balances under ₹1,000 (e.g. Kavita Deshmukh at ₹850) roll over automatically to the next cycle.
-3. **No Self-Signup**: Authors and staff are provisioned during publishing contract execution. Public registration is omitted; users sign in with provisioned credentials.
-4. **First-Reply Status Automation**: When support staff posts the first reply to an `Open` ticket, status transitions automatically to `In progress`, decrementing the `needs_first_reply` KPI queue.
+1. **Accounting Cut-off Date**: Financial data is modeled around a March 2024 snapshot date; historical royalty figures reflect audited sales up to that cycle.
+2. **₹1,000 Payout Minimum**: Applied across an author's **combined pending balance** across all their published titles. Balances below ₹1,000 (such as Kavita Deshmukh at ₹850) roll over automatically to the subsequent cycle.
+3. **No Public Registration**: In standard publishing workflows, author accounts are provisioned during contract execution. Public signups are omitted; users log in with provisioned credentials.
+4. **First-Reply Status Transition**: When an administrator sends the first official reply to an `Open` ticket, the ticket status automatically transitions to `In progress`, decrementing the `needs_first_reply` KPI queue count.
 
 ---
 
