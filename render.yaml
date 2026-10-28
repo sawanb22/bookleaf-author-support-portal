@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: bookleaf-api
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AI_PROVIDER
+        value: bedrock
+      - key: AWS_REGION
+        value: us-east-1
+      - key: BEDROCK_MODEL_ID
+        value: minimax.minimax-m2.5
+      - key: AWS_BEARER_TOKEN_BEDROCK
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://bookleaf-portal.vercel.app,http://localhost:3000

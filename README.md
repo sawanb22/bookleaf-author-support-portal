@@ -327,7 +327,9 @@ bookleaf-author-support-portal/
 ├── .gitignore                                 # Production git ignore configuration
 ├── DECISIONS.md                               # Architectural Decision Records (ADRs)
 ├── README.md                                  # Project documentation
+├── render.yaml                                # Render deployment blueprint
 ├── backend/                                   # FastAPI Python Backend Service
+│   ├── Procfile                               # Render start command (uvicorn)
 │   ├── bookleaf_sample_data.json              # Canonical 10-author dataset
 │   ├── requirements.txt                       # Python dependencies
 │   ├── app/
@@ -341,6 +343,7 @@ bookleaf-author-support-portal/
 │   ├── scripts/                               # Canonical database seed script
 │   └── tests/                                 # Pytest automated test suite (34 tests)
 ├── frontend/                                  # Next.js 14 App Router Frontend
+│   ├── vercel.json                            # Vercel deployment configuration
 │   ├── package.json                           # Node dependencies
 │   ├── app/
 │   │   ├── (author)/                          # Author route group (Books, Tickets, New)
@@ -348,5 +351,9 @@ bookleaf-author-support-portal/
 │   │   └── login/                             # Unified authentication screen
 │   ├── components/                            # Reusable UI components
 │   └── tests/                                 # Adversarial and E2E browser tests
-└── docs/screenshots/                          # Interface preview assets
+└── docs/                                      # Project documentation & assets
+    ├── API_DOCUMENTATION.md                   # Full API reference (Markdown)
+    ├── BookLeaf_API_Documentation.pdf         # Exported API reference (PDF)
+    ├── openapi.json                           # OpenAPI 3.1 schema (machine-readable)
+    └── screenshots/                           # Interface preview assets
 ```
