@@ -205,8 +205,7 @@ class TicketService:
                 "id": r["id"],
                 "subject": r["subject"],
                 "status": r["status"],
-                "priority": r["priority"],
-                "category": r["category"],
+                # category and priority are internal admin fields; omitted from author view
                 "book_id": r.get("book_id"),
                 "book_title": r.get("book_title"),
                 "has_unread": bool(r.get("has_unread")),
@@ -278,7 +277,10 @@ class TicketService:
         return {
             **dict(row),
             "has_unread": False,
-            "messages": messages
+            "messages": messages,
+            # Strip internal admin fields from author-facing ticket detail
+            "category": None,
+            "priority": None,
         }
 
     @staticmethod

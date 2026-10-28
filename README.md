@@ -10,16 +10,16 @@ A full-stack author support portal and admin triage desk built for BookLeaf Publ
 
 ## 1. Demo Logins
 
-All demo accounts share the password **`demo`** (hashed with Argon2id).
+Authors use password **`Author2024!`**. Admins use **`Admin2024!`**. All passwords are hashed with Argon2id.
 
-| Role | Name | Email (Login) | Test Persona Focus |
-| :--- | :--- | :--- | :--- |
-| **Author** | Priya Sharma (`AUTH001`) | `priya.sharma@email.com` | Has 2 published live titles (*The Saffron Diaries*, *Whispers of the Ganges*). Payout eligible: ₹19,908 earned, ₹16,338 paid, ₹3,570 pending. |
-| **Author** | Kavita Deshmukh (`AUTH009`) | `kavita.deshmukh@email.com` | Has 1 live title + 1 manuscript in typesetting (*Raising Roots*). Pending balance of ₹850 triggers the ₹1,000 minimum threshold rollover policy. |
-| **Admin** | Ops Admin | `ops.admin@bookleaf.demo` | Operations team: Full access to the global triage queue, urgency sorting, ticket reassignments, and status updates. |
-| **Admin** | Support Lead | `support.lead@bookleaf.demo` | Support leadership: Real-time operational KPI metrics, AI draft review/editing, and internal staff notes. |
+| Role | Name | Email (Login) | Password | Test Persona Focus |
+| :--- | :--- | :--- | :--- | :--- |
+| **Author** | Priya Sharma (`AUTH001`) | `priya.sharma@email.com` | `Author2024!` | Has 2 published live titles (*The Saffron Diaries*, *Whispers of the Ganges*). Payout eligible: Rs. 19,908 earned, Rs. 16,338 paid, Rs. 3,570 pending. |
+| **Author** | Kavita Deshmukh (`AUTH009`) | `kavita.deshmukh@email.com` | `Author2024!` | Has 1 live title + 1 manuscript in typesetting (*Raising Roots*). Pending balance of Rs. 850 triggers the Rs. 1,000 minimum threshold rollover policy. |
+| **Admin** | Ops Admin | `ops.admin@bookleaf.demo` | `Admin2024!` | Operations team: Full access to the global triage queue, urgency sorting, ticket reassignments, and status updates. |
+| **Admin** | Support Lead | `support.lead@bookleaf.demo` | `Admin2024!` | Support leadership: Real-time operational KPI metrics, AI draft review/editing, and internal staff notes. |
 
-> **All Seeded Authors**: 10 author accounts (`AUTH001`–`AUTH010`, including `rohit.kapoor@email.com` and `sneha.kulkarni@email.com`) are fully seeded with their respective books, retail distribution links, and royalty records. All use password `demo`.
+> **All Seeded Authors**: 10 author accounts (`AUTH001`–`AUTH010`, including `rohit.kapoor@email.com` and `sneha.kulkarni@email.com`) are fully seeded with their respective books, retail distribution links, and royalty records. All use password `Author2024!`.
 > 
 > **Cold Starts**: If viewing on free-tier hosting (Render / Neon serverless compute suspend), the backend may take roughly 45–60 seconds to wake up on the first request. Subsequent interactions are immediate.
 
@@ -89,7 +89,7 @@ flowchart TD
 | **Backend** | **FastAPI (Python 3.10+)** | High-throughput asynchronous routing with `asyncpg`, strict Pydantic v2 contract validation with `extra='forbid'`, and automatic OpenAPI documentation. |
 | **Database** | **Neon PostgreSQL** | Cloud-native serverless PostgreSQL with pooled connections, ACID compliance, and schema-enforced relational integrity. |
 | **AI / LLM** | **AWS Bedrock Mantle (`minimax.minimax-m2.5`)** | High inference speed, solid grasp of Indian publishing context, and reliable JSON schema compliance. |
-| **Auth** | **Argon2id + JWT** | Memory-hard password hashing (RFC 9106) resistant to GPU cracking, paired with stateless 24-hour Bearer tokens. |
+| **Auth** | **Argon2id + JWT** | Memory-hard password hashing (RFC 9106) resistant to GPU cracking, paired with stateless 60-minute Bearer tokens. |
 
 ### Engineering Decisions & Trade-offs
 

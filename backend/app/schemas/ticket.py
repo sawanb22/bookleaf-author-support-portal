@@ -64,8 +64,8 @@ class TicketOut(BaseModel):
     subject: str
     description: Optional[str] = None
     status: str
-    priority: str
-    category: str
+    priority: Optional[str] = None  # Hidden from author-facing responses
+    category: Optional[str] = None  # Hidden from author-facing responses
     book_id: Optional[str] = None
     book_title: Optional[str] = None
     author_id: Optional[str] = None

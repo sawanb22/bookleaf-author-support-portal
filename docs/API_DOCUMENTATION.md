@@ -1,596 +1,721 @@
-# BookLeaf Author Support Portal — API Specification
+# BookLeaf Author Support Portal — API Reference
 
 **Version:** `1.0.0`  
-**Protocol:** HTTP/1.1 & HTTP/2 over TLS  
 **Base URLs:**  
-* **Local Development:** `http://localhost:8000`  
-* **Production API:** `https://bookleaf-api.onrender.com`  
-* **Interactive OpenAPI (Swagger):** `/docs`  
-* **Alternative OpenAPI (ReDoc):** `/redoc`  
-* **Machine-Readable OpenAPI 3.1:** `/openapi.json`  
+- Local: `http://localhost:8000`  
+- Production: `https://bookleaf-api.onrender.com` *(update after Render deploy)*  
+- Interactive Swagger UI: `/docs`  
+- ReDoc: `/redoc`  
+- OpenAPI JSON: `/openapi.json`
 
 ---
 
 ## 1. Architecture & Security Conventions
 
-### 1.1 Authentication & Authorization Model
-All protected endpoints require an HTTP Bearer JWT token passed in the `Authorization` request header:
+### 1.1 Authentication Model
+
+All protected endpoints require an HTTP Bearer JWT in the `Authorization` header:
 
 ```http
 Authorization: Bearer <jwt_access_token>
 ```
 
-Tokens are obtained via `POST /api/v1/auth/login` and signed using HMAC-SHA256 (`HS256`).
+Tokens are issued by `POST /api/v1/auth/login` and signed with HMAC-SHA256 (`HS256`).
 
-* **Token Lifespan:** 24 hours (`exp` claim).
-* **Token Claims:**
-  * `sub`: User ID (e.g., `AUTH001` or `admin_ops`)
-  * `name`: User full display name
-  * `email`: User login email
-  * `role`: User permission scope (`author` or `admin`)
-  * `author_id`: Linked author profile ID (for `author` roles only)
+| Claim | Description |
+|---|---|
+| `sub` | User ID (`AUTH001` … `AUTH010`, `admin_ops`, `admin_support`) |
+| `name` | Display name |
+| `email` | Login email |
+| `role` | `author` or `admin` |
+| `exp` | Expiry — 60 minutes from issue |
 
-### 1.2 Access Control & Data Isolation Rules
-1. **Role-Based Access Control (RBAC):**
-   * Endpoints under `/api/v1/me/*` require `role == "author"`. An admin token will receive `403 Forbidden`.
-   * Endpoints under `/api/v1/admin/*` require `role == "admin"`. An author token will receive `403 Forbidden`.
-   * Missing or invalid tokens on protected routes return `401 Unauthorized`.
-2. **Zero-Knowledge Multi-Tenant Isolation:**
-   * When an author requests a ticket (`GET /api/v1/me/tickets/{ticket_id}`) that belongs to another author, the API returns `404 Not Found` (never `403 Forbidden`). This prevents ID enumeration and timing probes.
-3. **Strict Payload Filtering:**
-   * All request bodies are validated with Pydantic v2 configured with `extra='forbid'`. Injecting unauthorized fields (e.g., `author_id`, `status`, or `priority` on creation) triggers a `422 Unprocessable Entity` validation failure.
+### 1.2 Role-Based Access Control
 
-### 1.3 RFC 7807 Error Schema
-All error responses adhere to the standard RFC 7807 Problem Details specification:
+| Prefix | Required role | Violation response |
+|---|---|---|
+| `/api/v1/me/*` | `author` | `403 Forbidden` |
+| `/api/v1/admin/*` | `admin` | `403 Forbidden` |
+| Any protected route | Any valid token | `401 Unauthorized` |
+
+**Data isolation:** When an author requests a ticket that belongs to another author the API returns `404 Not Found`, not `403`. This prevents ID enumeration — the existence of the resource is not confirmed.
+
+**Strict input:** All request bodies use `extra='forbid'` (Pydantic v2). Sending undeclared fields like `author_id`, `priority`, or `category` on creation returns `422`.
+
+**Author field visibility:** `category` and `priority` are internal admin fields. They are never included in author-facing ticket list or detail responses. Admins see both fields in full.
+
+### 1.3 SSE Stream Authentication
+
+Both SSE endpoints (`GET /api/v1/me/stream` and `GET /api/v1/admin/stream`) authenticate via the standard `Authorization: Bearer <token>` header — **not** a query-string token. Because browsers cannot set custom headers on `EventSource`, the frontend initiates the connection through a server-side proxy (Next.js rewrites in `next.config.mjs`) that forwards the header transparently, so no token is ever embedded in the URL.
+
+### 1.4 Error Format
+
+All errors follow a consistent envelope. HTTP status is the canonical error signal; the `code` field disambiguates within that status.
 
 ```json
 {
-  "type": "https://bookleaf.pub/errors/validation_error",
-  "title": "Unprocessable Entity",
-  "status": 422,
-  "detail": "Description must be at least 10 characters.",
-  "instance": "/api/v1/me/tickets"
+  "error": {
+    "code": "validation_error",
+    "message": "Validation failed for request data.",
+    "details": [
+      { "field": "subject", "message": "Field required" },
+      { "field": "description", "message": "String should have at least 10 characters" }
+    ],
+    "request_id": "a1b2c3"
+  }
 }
 ```
 
+`details` is a per-field list for `422` responses, `null` for most other errors.
+
+**Error type paths** (relative, for RFC 7807 `type` field):
+
+| HTTP Status | `code` | When |
+|---|---|---|
+| `400` | `bad_request` | Malformed request body |
+| `401` | `unauthorized` | Missing or invalid token |
+| `401` | `invalid_credentials` | Wrong email or password |
+| `403` | `forbidden` | Role mismatch |
+| `404` | `ticket_not_found` | Ticket does not exist or is not owned by caller |
+| `404` | `book_not_found` | Book not found or not owned by caller |
+| `409` | `conflict` | Duplicate resource (e.g., ticket already classified) |
+| `422` | `validation_error` | Field validation failure |
+| `429` | `rate_limited` | Too many requests |
+| `503` | `ai_unavailable` | Bedrock circuit breaker open or timeout |
+| `500` | `internal_error` | Unhandled server error |
+
 ---
 
-## 2. Health & Operational Probes
+## 2. Ticket Categories
 
-### 2.1 Service Liveness Probe
-Checks if the ASGI HTTP listener and Uvicorn process are active.
+Every ticket belongs to exactly one of the following six categories. The AI classifier assigns the category automatically on creation; an admin can override it via `PATCH /api/v1/admin/tickets/{ticket_id}`.
+
+| `category` value | Display name | Typical priority floor |
+|---|---|---|
+| `royalty_payments` | Royalty & Payments | High (Critical if 2+ cycles overdue or legal threat) |
+| `isbn_metadata` | ISBN & Metadata Issues | High (policy floor — all ISBN errors are High) |
+| `printing_quality` | Printing & Quality | High (defective author copies) |
+| `distribution_availability` | Distribution & Availability | High (book unavailable on retail) |
+| `book_status_production` | Book Status & Production Updates | Medium |
+| `general_inquiry` | General Inquiry | Low |
+
+---
+
+## 3. AI Classification and Priority
+
+### How it works
+
+When an author creates a ticket (`POST /api/v1/me/tickets`), the ticket is persisted immediately with `ai_status: "pending"` and `category: "general_inquiry"` as placeholders. A background task then calls AWS Bedrock (MiniMax M2.5) to classify the ticket and updates `category`, `priority`, `ai_category`, `ai_priority`, and `ai_status` in place.
+
+The background task is fire-and-forget; the creation response does not include AI results. Admins see the final classified values when they open the queue.
+
+### Fallback when Bedrock fails
+
+If Bedrock is unreachable or times out (30 s classify / 45 s draft), a circuit breaker trips after 5 consecutive failures. While open, the system falls back to a deterministic keyword-based classifier that covers all six categories. The ticket is stored with `ai_status: "failed"` to signal that the result was not model-generated.
+
+Manual reply still works normally when AI fails. Admins can send a message through `POST /api/v1/admin/tickets/{id}/messages` without generating a draft.
+
+### Retry classification
+
+If a ticket's `ai_status` is `"failed"`, an admin can trigger a fresh Bedrock call:
+
+```
+POST /api/v1/admin/tickets/{ticket_id}/classify
+```
+
+This returns the updated ticket with new `category`, `priority`, and `ai_status: "completed"`.
+
+### Admin override
+
+Admins can override the AI's `category` and `priority` decisions at any time:
+
+```
+PATCH /api/v1/admin/tickets/{ticket_id}
+{ "category": "royalty_payments", "priority": "Critical" }
+```
+
+When an admin changes `category` or `priority` away from the AI's original suggestion, `category_overridden` / `priority_overridden` are set to `true` and stored for audit.
+
+---
+
+## 4. Health Probes
+
+### 4.1 Liveness
 
 ```http
 GET /health
 GET /api/health
 ```
 
-* **Authentication:** None (Public)
-* **Response `200 OK`:**
+No authentication required.
+
 ```json
 {
   "status": "healthy",
   "uptime": 234.12,
-  "timestamp": "2026-10-26T00:15:00.000000Z"
+  "timestamp": "2026-10-28T07:00:00.000000Z"
 }
 ```
 
-### 2.2 Database Readiness Probe
-Validates that the async PostgreSQL connection pool (`asyncpg`) can execute queries against Neon PostgreSQL.
+### 4.2 Readiness
 
 ```http
 GET /health/ready
 GET /api/health/ready
 ```
 
-* **Authentication:** None (Public)
-* **Response `200 OK`:**
+No authentication required. Returns `503` if the asyncpg pool cannot ping Neon PostgreSQL.
+
 ```json
 {
   "status": "ready",
   "database": "connected",
   "pool_size": 10,
-  "timestamp": "2026-10-26T00:15:00.000000Z"
+  "timestamp": "2026-10-28T07:00:00.000000Z"
 }
 ```
-* **Response `503 Service Unavailable`:** Returned if PostgreSQL pool ping times out or credentials fail.
 
 ---
 
-## 3. Authentication Endpoints
+## 5. Authentication Endpoints
 
-### 3.1 User Login
-Authenticates an author or administrator using email and password.
+### 5.1 Login
 
 ```http
 POST /api/v1/auth/login
+Content-Type: application/json
 ```
 
-* **Authentication:** None (Public)
-* **Request Body (`application/json`):**
+**Request:**
 ```json
 {
   "email": "priya.sharma@email.com",
-  "password": "demo"
+  "password": "Author2024!"
 }
 ```
-* **Response `200 OK`:**
+
+**Response `200 OK`:**
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGci...",
   "token_type": "bearer",
-  "expires_in": 86400,
   "user": {
     "id": "AUTH001",
-    "name": "Priya Sharma",
     "email": "priya.sharma@email.com",
+    "name": "Priya Sharma",
     "role": "author",
-    "author_id": "AUTH001"
+    "avatar_initials": "PS"
   }
 }
 ```
-* **Error Responses:**
-  * `401 Unauthorized`: Invalid email or password.
-  * `422 Unprocessable Entity`: Missing email or malformed payload.
 
-* **cURL Example:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "priya.sharma@email.com", "password": "demo"}'
-```
+**Response `401`:** Invalid credentials.
 
-### 3.2 Current Session Profile
-Retrieves authenticated user claims from the token.
+### 5.2 Current User
 
 ```http
 GET /api/v1/auth/me
+Authorization: Bearer <token>
 ```
 
-* **Authentication:** Bearer Token (Author or Admin)
-* **Response `200 OK`:**
-```json
-{
-  "id": "AUTH001",
-  "name": "Priya Sharma",
-  "email": "priya.sharma@email.com",
-  "role": "author",
-  "author_id": "AUTH001"
-}
-```
+Returns the same `user` object from login plus `bank_name` and `account_last4` for authors.
 
 ---
 
-## 4. Author Domain (`/api/v1/me/*`)
+## 6. Author Endpoints (`/api/v1/me/`)
 
-These endpoints provide author self-service features for catalog visibility, royalties, and tickets.
+All endpoints in this group require `role == "author"`.
 
-### 4.1 Get Author Books & Royalty Ledgers
-Returns all titles contracted to the authenticated author, including retail platform distribution links and audited financial balances.
+### 6.1 Get My Books
 
 ```http
 GET /api/v1/me/books
+Authorization: Bearer <author_token>
 ```
 
-* **Authentication:** Bearer Token (`role: author`)
-* **Response `200 OK`:**
+**Response `200 OK`:**
 ```json
-[
-  {
-    "id": "BK001",
-    "title": "Whispers of the Ganges",
-    "subtitle": "A Journey Through Varanasi",
-    "status": "Published & Live",
-    "isbn": "978-93-5400-101-1",
-    "price": 399.00,
-    "copies_sold": 450,
-    "total_royalty_earned": 12500.00,
-    "royalty_paid": 10000.00,
-    "royalty_pending": 2500.00,
-    "platforms": [
-      {
-        "platform_name": "Amazon India",
-        "url": "https://amazon.in/dp/B08XYZ101",
-        "is_active": true
-      },
-      {
-        "platform_name": "Flipkart",
-        "url": "https://flipkart.com/book/bk001",
-        "is_active": true
-      }
-    ]
+{
+  "books": [
+    {
+      "id": "BK001",
+      "external_id": "BK001",
+      "author_id": "AUTH001",
+      "title": "Whispers of the Ganges",
+      "isbn": "978-93-5XXXX-01-1",
+      "genre": "Literary Fiction",
+      "publication_date": "2023-06-20",
+      "status": "Published & Live",
+      "mrp": 399.0,
+      "total_copies_sold": 342,
+      "total_royalty_earned": 11970.0,
+      "royalty_paid": 8400.0,
+      "royalty_pending": 3570.0,
+      "last_royalty_payout_date": "2025-10-15",
+      "print_partner": "In-House",
+      "platforms": ["Amazon India", "Flipkart", "BookLeaf Store"]
+    }
+  ],
+  "summary": {
+    "total_royalty_earned": 11970.0,
+    "royalty_paid": 8400.0,
+    "royalty_pending": 3570.0
   }
-]
+}
 ```
 
-### 4.2 List Author Support Tickets
-Retrieves all support tickets filed by the authenticated author.
+> **Note:** `platforms` is a list of platform names (e.g., `"Amazon India"`). No URLs are stored in the dataset.
+
+> **Note:** `royalty_pending = total_royalty_earned − royalty_paid` is enforced as a database constraint on every row.
+
+### 6.2 List My Tickets
 
 ```http
-GET /api/v1/me/tickets
+GET /api/v1/me/tickets?status=open
+Authorization: Bearer <author_token>
 ```
 
-* **Authentication:** Bearer Token (`role: author`)
-* **Query Parameters:**
-  * `status` *(string, optional)*: Filter by ticket status (`Open`, `In progress`, `Resolved`, `Closed`). Defaults to all.
-* **Response `200 OK`:**
+**Query parameters:**
+
+| Param | Values | Default |
+|---|---|---|
+| `status` | `open`, `in_progress`, `resolved`, `closed`, `all` | All |
+
+`category` and `priority` are **not** returned in author ticket list responses. These are internal admin fields.
+
+**Response `200 OK`:**
 ```json
-[
-  {
-    "id": "BL-1001",
-    "subject": "Missing Q3 royalty payment calculation",
-    "status": "In progress",
-    "priority": "Medium",
-    "category": "royalty_inquiry",
-    "book_id": "BK001",
-    "book_title": "Whispers of the Ganges",
-    "has_unread": false,
-    "message_count": 3,
-    "created_at": "2026-10-25T14:30:00Z",
-    "updated_at": "2026-10-25T15:10:00Z"
-  }
-]
+{
+  "tickets": [
+    {
+      "id": "BL-1042",
+      "subject": "Can I update my book description on Amazon",
+      "status": "Open",
+      "book_id": "BK001",
+      "book_title": "Whispers of the Ganges",
+      "has_unread": false,
+      "message_count": 1,
+      "created_at": "2026-10-25T09:45:00Z",
+      "updated_at": "2026-10-25T09:45:00Z",
+      "messages": [...]
+    }
+  ],
+  "total": 1
+}
 ```
 
-### 4.3 Create New Support Ticket
-Submits a new inquiry. The database enforces via composite foreign key that `book_id` belongs to this author.
+### 6.3 Create Ticket
 
 ```http
 POST /api/v1/me/tickets
+Authorization: Bearer <author_token>
+Content-Type: application/json
 ```
 
-* **Authentication:** Bearer Token (`role: author`)
-* **Request Body (`application/json`):**
+**Request:**
 ```json
 {
-  "subject": "Delay in quarterly royalty disbursement",
-  "description": "Hello BookLeaf support team, I would like to check when the Q3 royalties for my book will be processed.",
+  "subject": "Royalty not received for Q3",
+  "description": "I have not received my royalty payment for the third quarter. My pending balance shows Rs. 3,570.",
   "book_id": "BK001"
 }
 ```
-* **Validation Rules:**
-  * `subject`: 5 to 200 characters.
-  * `description`: Minimum 10 characters.
-  * `book_id`: Optional string; if provided, must exist and be owned by the author.
-* **Response `201 Created`:**
+
+`book_id` is optional. If supplied, it must belong to the authenticated author; otherwise `404` is returned.
+
+Fields the author **cannot** set on creation (enforced by `extra='forbid'`): `category`, `priority`, `status`, `author_id`, `assignee`.
+
+**Response `201 Created`:** Ticket object with `status: "Open"`, `ai_status: "pending"`. AI classification runs asynchronously in the background.
+
+**Validation errors `422`:**
 ```json
 {
-  "id": "BL-1130",
-  "subject": "Delay in quarterly royalty disbursement",
-  "description": "Hello BookLeaf support team, I would like to check when the Q3 royalties for my book will be processed.",
-  "status": "Open",
-  "priority": "Medium",
-  "category": "royalty_inquiry",
-  "book_id": "BK001",
-  "book_title": "Whispers of the Ganges",
-  "created_at": "2026-10-26T00:20:00Z",
-  "updated_at": "2026-10-26T00:20:00Z",
-  "messages": [
-    {
-      "id": "msg_BL-1130_1",
-      "ticket_id": "BL-1130",
-      "sender_name": "Priya Sharma",
-      "sender_role": "author",
-      "body": "Hello BookLeaf support team, I would like to check when the Q3 royalties for my book will be processed.",
-      "is_from_staff": false,
-      "is_internal_note": false,
-      "created_at": "2026-10-26T00:20:00Z"
-    }
-  ]
+  "error": {
+    "code": "validation_error",
+    "message": "Validation failed for request data.",
+    "details": [
+      { "field": "subject", "message": "String should have at least 3 characters" },
+      { "field": "description", "message": "String should have at least 10 characters" }
+    ],
+    "request_id": "d4e5f6"
+  }
 }
 ```
 
-### 4.4 Get Single Ticket & Conversation Thread
-Retrieves full details and visible message thread for a ticket.
+### 6.4 Get Ticket Detail
 
 ```http
 GET /api/v1/me/tickets/{ticket_id}
+Authorization: Bearer <author_token>
 ```
 
-* **Authentication:** Bearer Token (`role: author`)
-* **Path Parameters:**
-  * `ticket_id` *(string)*: Ticket identifier (e.g. `BL-1001`).
-* **Security Behavior:** If `ticket_id` belongs to another author, returns `404 Not Found`. Internal staff notes (`is_internal_note: true`) are stripped from this view.
-* **Response `200 OK`:**
+Returns the ticket and all non-internal messages. If the ticket belongs to a different author, returns `404`.
+
+Internal notes (`is_internal_note: true`) are never included in the author-facing message list; they are visible only through `GET /api/v1/admin/tickets/{id}`.
+
+Staff messages show `sender_name: "BookLeaf Support"` regardless of which admin sent them, so individual staff names are never exposed to authors.
+
+**Response `200 OK`:**
 ```json
 {
-  "id": "BL-1001",
-  "subject": "Missing Q3 royalty payment calculation",
-  "description": "I would like to check my Q3 sales figures...",
-  "status": "In progress",
-  "priority": "Medium",
-  "category": "royalty_inquiry",
+  "id": "BL-1042",
+  "subject": "Can I update my book description on Amazon",
+  "status": "Open",
   "book_id": "BK001",
   "book_title": "Whispers of the Ganges",
   "has_unread": false,
-  "created_at": "2026-10-25T14:30:00Z",
-  "updated_at": "2026-10-25T15:10:00Z",
   "messages": [
     {
-      "id": "msg_BL-1001_1",
+      "id": "msg_BL-1042_1",
       "sender_name": "Priya Sharma",
       "sender_role": "author",
-      "body": "I would like to check my Q3 sales figures...",
+      "body": "Can I update the blurb and description of Whispers of the Ganges on Amazon?",
       "is_from_staff": false,
-      "created_at": "2026-10-25T14:30:00Z"
-    },
-    {
-      "id": "msg_BL-1001_2",
-      "sender_name": "BookLeaf Support",
-      "sender_role": "support",
-      "body": "Dear Priya,\n\nThank you for reaching out regarding your royalties...",
-      "is_from_staff": true,
-      "created_at": "2026-10-25T15:10:00Z"
+      "is_internal_note": false,
+      "created_at": "2026-10-25T09:45:00Z"
     }
   ]
 }
 ```
 
-### 4.5 Post Follow-up Message
-Appends a message from the author to the conversation thread.
+### 6.5 Reply to Ticket
 
 ```http
 POST /api/v1/me/tickets/{ticket_id}/messages
+Authorization: Bearer <author_token>
+Content-Type: application/json
 ```
 
-* **Authentication:** Bearer Token (`role: author`)
-* **Request Body (`application/json`):**
+**Request:**
 ```json
-{
-  "body": "Thank you for the update. Could you please confirm the bank account on file?"
-}
+{ "body": "Could you please confirm the timeline for the description update?" }
 ```
-* **Response `201 Created`:**
-```json
-{
-  "id": "msg_BL-1001_3",
-  "ticket_id": "BL-1001",
-  "sender_name": "Priya Sharma",
-  "sender_role": "author",
-  "body": "Thank you for the update. Could you please confirm the bank account on file?",
-  "is_from_staff": false,
-  "created_at": "2026-10-26T00:25:00Z"
-}
+
+If the ticket was `Resolved` or `Closed`, a new author message automatically reopens it to `In progress`. Returns `201` with the new message object.
+
+### 6.6 SSE Event Stream
+
+```http
+GET /api/v1/me/stream
+Authorization: Bearer <author_token>
+Accept: text/event-stream
 ```
+
+Long-lived connection. The server sends `ticket.classified`, `ticket.updated`, and `message.created` events filtered to the authenticated author's tickets only. A keepalive comment (`: keepalive`) is sent every 15 seconds.
+
+Authentication is via the `Authorization` header forwarded by the Next.js proxy — no token in the URL.
 
 ---
 
-## 5. Admin Domain (`/api/v1/admin/*`)
+## 7. Admin Endpoints (`/api/v1/admin/`)
 
-These endpoints allow publishing staff to triage, prioritize, reassign, and respond to author tickets.
+All endpoints require `role == "admin"`.
 
-### 5.1 Operational Queue Metrics
-Returns real-time KPI counter cards for queue management.
-
-```http
-GET /api/v1/admin/stats
-GET /api/v1/admin/metrics
-```
-
-* **Authentication:** Bearer Token (`role: admin`)
-* **Response `200 OK`:**
-```json
-{
-  "total_in_queue": 14,
-  "needs_first_reply": 6,
-  "critical_escalations": 2,
-  "resolved_today": 8,
-  "avg_first_response_hours": 3.2
-}
-```
-
-### 5.2 List All Support Tickets (Triage Queue)
-Returns the global ticket queue with multi-field filtering and urgency sorting.
+### 7.1 Get Ticket Queue
 
 ```http
 GET /api/v1/admin/tickets
+Authorization: Bearer <admin_token>
 ```
 
-* **Authentication:** Bearer Token (`role: admin`)
-* **Query Parameters:**
-  * `status` *(string, optional)*: Filter by `Open`, `In progress`, `Resolved`, `Closed`, or `all`.
-  * `priority` *(string, optional)*: Filter by `Critical`, `High`, `Medium`, `Low`.
-  * `category` *(string, optional)*: Filter by issue classification.
-  * `assignee` *(string, optional)*: Filter by assigned staff name.
-  * `search` *(string, optional)*: Text search across subject, author name, or ticket ID.
-* **Response `200 OK`:**
+**Query parameters:**
+
+| Param | Values | Default |
+|---|---|---|
+| `status` | `open`, `in_progress`, `resolved`, `closed`, `all` | All |
+| `category` | Any of the six category values | All |
+| `priority` | `critical`, `high`, `medium`, `low` | All |
+| `assignee` | Admin `id` (e.g., `admin_ops`), or `unassigned` | All |
+| `q` | Free-text search on subject, description, author name, ticket ID | — |
+| `sort` | `urgency` (default), `newest`, `oldest` | `urgency` |
+
+`urgency` sort: unresolved first, then `Critical → High → Medium → Low`, then oldest created at top.
+
+**Response `200 OK`:**
 ```json
-[
-  {
-    "id": "BL-1001",
-    "subject": "Missing Q3 royalty payment calculation",
-    "author_id": "AUTH001",
-    "author_name": "Priya Sharma",
-    "status": "In progress",
-    "priority": "Medium",
-    "category": "royalty_inquiry",
-    "assignee": "Ops Admin",
-    "book_id": "BK001",
-    "book_title": "Whispers of the Ganges",
-    "has_unread": false,
-    "ai_draft": "Dear Priya,\n\nWe have reviewed your Q3 earnings...",
-    "created_at": "2026-10-25T14:30:00Z",
-    "updated_at": "2026-10-25T15:10:00Z"
-  }
-]
+{
+  "items": [ /* array of TicketOut */ ],
+  "total": 42
+}
 ```
 
-### 5.3 Get Admin Ticket Detail
-Retrieves full ticket context including internal staff notes, AI classification confidence, reasoning, and suggested drafts.
+Each item includes `category`, `priority`, `ai_status`, `assignee`, `assignee_id`, and `author_name` — these fields are visible only to admins.
+
+### 7.2 Get Ticket Detail
 
 ```http
 GET /api/v1/admin/tickets/{ticket_id}
+Authorization: Bearer <admin_token>
 ```
 
-* **Authentication:** Bearer Token (`role: admin`)
-* **Response `200 OK`:**
+Returns the full ticket with all messages (including internal notes), events, notes, AI fields, and the author's book list for context.
+
+**Response `200 OK` (selected fields):**
 ```json
 {
-  "id": "BL-1001",
-  "subject": "Missing Q3 royalty payment calculation",
-  "author_id": "AUTH001",
+  "id": "BL-1042",
+  "status": "Open",
+  "category": "general_inquiry",
+  "priority": "Low",
+  "ai_status": "completed",
+  "ai_category": "general_inquiry",
+  "ai_priority": "Low",
+  "ai_reasoning": "Classified via Bedrock Mantle inference.",
+  "category_overridden": false,
+  "priority_overridden": false,
+  "assignee": null,
+  "assignee_id": null,
   "author_name": "Priya Sharma",
   "author_email": "priya.sharma@email.com",
-  "status": "In progress",
-  "priority": "Medium",
-  "category": "royalty_inquiry",
+  "bank_name": "HDFC Bank",
+  "account_last4": "4091",
+  "ai_draft": "Dear Priya Sharma,\n\nThank you...",
+  "ai_draft_missing_info": [],
+  "ai_draft_escalation": false,
+  "ai_draft_unverified": ["Rs. 3,570"],
+  "messages": [ /* includes internal notes */ ],
+  "notes": [ /* ticket_notes table */ ],
+  "events": [ /* audit trail */ ],
+  "author_books": [ /* all books for this author */ ]
+}
+```
+
+`ai_draft_unverified` lists figures in the draft that could not be confirmed against the authoritative facts block (e.g., amounts not matching the DB ledger). It is a list of strings, never a boolean.
+
+### 7.3 Update Ticket
+
+```http
+PATCH /api/v1/admin/tickets/{ticket_id}
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+```
+
+All fields are optional. Only send what you want to change.
+
+**Request (status + assignee + AI override example):**
+```json
+{
+  "status": "in_progress",
   "assignee": "Ops Admin",
-  "book_id": "BK001",
-  "book_title": "Whispers of the Ganges",
-  "ai_status": "completed",
-  "ai_category": "royalty_inquiry",
-  "ai_priority": "Medium",
-  "ai_confidence": 0.94,
-  "ai_reasoning": "Author questions Q3 royalty schedule. Account shows ₹3,570 pending balance exceeding the ₹1,000 threshold.",
-  "ai_draft": "Dear Priya,\n\nThank you for reaching out to BookLeaf Support...",
-  "messages": [
+  "assignee_id": "admin_ops",
+  "category": "royalty_payments",
+  "priority": "High"
+}
+```
+
+Machine status values: `Open`, `In progress`, `Resolved`, `Closed`. The UI may display `In progress` as "In Progress" — the stored value always uses a lowercase `p`.
+
+When `category` or `priority` differs from the AI's original suggestion, `category_overridden` / `priority_overridden` are set to `true` automatically.
+
+**Assignee:** Set `assignee_id` to the admin's `id` (e.g., `admin_ops`). To get the list of admins for a dropdown, call `GET /api/v1/admin/staff`.
+
+**Response `200 OK`:** Full updated ticket detail object.
+
+### 7.4 Send Admin Reply
+
+```http
+POST /api/v1/admin/tickets/{ticket_id}/messages
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "body": "Dear Priya, you can update your book description...",
+  "from_ai_draft": true,
+  "status": "Resolved"
+}
+```
+
+`from_ai_draft` flags whether this message was edited from an AI-generated draft (tracked in `draft_edited`). `status` is optional — defaults to `In progress` if ticket was `Open`, otherwise leaves the status unchanged.
+
+The message is stored with `is_from_staff: true`. Authors see the `sender_name` as `"BookLeaf Support"`.
+
+**Response `201 Created`:** Message object.
+
+### 7.5 Create Internal Note
+
+```http
+POST /api/v1/admin/tickets/{ticket_id}/notes
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+```
+
+```json
+{ "body": "Escalating to finance team — overdue by 2 cycles." }
+```
+
+Internal notes are stored with `is_internal_note: true`. They appear in `GET /api/v1/admin/tickets/{id}` message list but are **never** returned to authors.
+
+**Response `201 Created`:** Note object.
+
+### 7.6 Generate AI Draft
+
+```http
+POST /api/v1/admin/tickets/{ticket_id}/draft
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+```
+
+```json
+{ "regenerate": false }
+```
+
+Returns a cached draft if one exists and `regenerate` is `false`. Set `regenerate: true` to force a fresh Bedrock call.
+
+The draft is grounded in the author's actual account figures pulled from the DB (royalties earned, paid, pending, book details). It does not use a vector knowledge base — all facts are injected directly into the system prompt as a structured facts block.
+
+**Response `200 OK`:**
+```json
+{
+  "body": "Dear Priya Sharma,\n\nThank you for contacting BookLeaf...",
+  "missing_info": [],
+  "escalation_recommended": false,
+  "unverified_figures": ["Rs. 3,570 pending"],
+  "cached": true
+}
+```
+
+**Response `503 Service Unavailable` — Bedrock unavailable:**
+```json
+{
+  "error": {
+    "code": "ai_unavailable",
+    "message": "AI drafting service unavailable.",
+    "details": null,
+    "request_id": "f7a8b9"
+  }
+}
+```
+
+When `503` is returned the admin can still write and send a manual reply through `POST /api/v1/admin/tickets/{id}/messages` — AI failure never blocks the support workflow.
+
+### 7.7 Retry AI Classification
+
+```http
+POST /api/v1/admin/tickets/{ticket_id}/classify
+Authorization: Bearer <admin_token>
+```
+
+Triggers a fresh Bedrock classification call for a ticket where `ai_status == "failed"`. Updates `category`, `priority`, `ai_category`, `ai_priority`, and `ai_status` in place.
+
+**Response `202 Accepted`:** Full updated ticket object.
+
+**Response `500`:** If Bedrock fails again on retry.
+
+### 7.8 Admin Dashboard Stats
+
+```http
+GET /api/v1/admin/stats
+Authorization: Bearer <admin_token>
+```
+
+**Response `200 OK`:**
+```json
+{
+  "total_in_queue": 7,
+  "needs_first_reply": 5,
+  "near_sla_breach_count": 1,
+  "awaiting_author": 1,
+  "ai_draft_ready": 3,
+  "resolved_today": 1,
+  "ai_override_rate": 12,
+  "sla_compliance_rate": 94
+}
+```
+
+### 7.9 List Admin Staff
+
+```http
+GET /api/v1/admin/staff
+Authorization: Bearer <admin_token>
+```
+
+Returns all admin users — intended for assignment dropdown UI.
+
+**Response `200 OK`:**
+```json
+{
+  "staff": [
     {
-      "id": "msg_BL-1001_1",
-      "sender_name": "Priya Sharma",
-      "sender_role": "author",
-      "body": "I would like to check my Q3 sales figures...",
-      "is_internal_note": false,
-      "created_at": "2026-10-25T14:30:00Z"
+      "id": "admin_ops",
+      "name": "Ops Admin",
+      "email": "ops.admin@bookleaf.demo",
+      "role": "admin",
+      "avatar_initials": "OA",
+      "title": "Operations Lead"
     },
     {
-      "id": "msg_BL-1001_note_1",
-      "sender_name": "Support Lead",
-      "sender_role": "admin",
-      "body": "Verified NEFT transaction batch pending finance signoff.",
-      "is_internal_note": true,
-      "created_at": "2026-10-25T14:45:00Z"
+      "id": "admin_support",
+      "name": "Support Lead",
+      "email": "support.lead@bookleaf.demo",
+      "role": "admin",
+      "avatar_initials": "SL",
+      "title": "Support Lead"
     }
   ]
 }
 ```
 
-### 5.4 Update Ticket Status or Assignee
-Modifies the operational lifecycle state or assigns a support agent.
+Use `id` (e.g., `admin_ops`) as the value for `assignee_id` in `PATCH /api/v1/admin/tickets/{id}`.
+
+### 7.10 Admin SSE Event Stream
 
 ```http
-PATCH /api/v1/admin/tickets/{ticket_id}
-```
-
-* **Authentication:** Bearer Token (`role: admin`)
-* **Request Body (`application/json`):**
-```json
-{
-  "status": "Resolved",
-  "assignee": "Support Lead",
-  "priority": "High"
-}
-```
-* **Allowed Values:**
-  * `status`: `"Open"`, `"In progress"`, `"Resolved"`, `"Closed"`.
-  * `priority`: `"Critical"`, `"High"`, `"Medium"`, `"Low"`.
-* **Response `200 OK`:** Returns updated ticket object.
-
-### 5.5 Post Staff Reply or Private Internal Note
-Sends an official reply to the author or logs a staff-only internal note.
-
-```http
-POST /api/v1/admin/tickets/{ticket_id}/messages
-POST /api/v1/admin/tickets/{ticket_id}/notes
-```
-
-* **Authentication:** Bearer Token (`role: admin`)
-* **Request Body (`application/json`):**
-```json
-{
-  "body": "Dear Priya,\n\nYour Q3 royalty disbursement of ₹3,570.00 has been approved and scheduled for transfer.",
-  "is_internal_note": false
-}
-```
-* **State Behavior:**
-  * If `is_internal_note == false` on an `Open` ticket, status automatically transitions to `In progress`, decrementing the `needs_first_reply` KPI counter.
-  * Internal notes (`is_internal_note: true`) do NOT bump public `updated_at` timestamps or trigger author notifications.
-
-### 5.6 Generate / Regenerate AI Response Draft
-Calls AWS Bedrock Mantle on demand to synthesize a policy-grounded draft response.
-
-```http
-POST /api/v1/admin/tickets/{ticket_id}/draft
-```
-
-* **Authentication:** Bearer Token (`role: admin`)
-* **Query Parameters:**
-  * `regenerate` *(boolean, optional, default: false)*: Force a fresh inference request if an existing draft is cached.
-* **Response `200 OK`:**
-```json
-{
-  "ticket_id": "BL-1001",
-  "draft": "Dear Priya,\n\nThank you for reaching out regarding your royalties for 'Whispers of the Ganges'...\n\nWarm regards,\nBookLeaf Publishing Team",
-  "source": "bedrock:minimax.minimax-m2.5",
-  "unverified_figures": false,
-  "confidence": 0.94
-}
-```
-
----
-
-## 6. Real-Time Server-Sent Events (SSE)
-
-Clients establish unidirectional streaming connections over standard HTTP to receive real-time ticket doorbell events without polling.
-
-```http
-GET /api/v1/me/stream
 GET /api/v1/admin/stream
+Authorization: Bearer <admin_token>
+Accept: text/event-stream
 ```
 
-* **Authentication:** Query parameter `?token=<jwt_access_token>` or Bearer header.
-* **Headers:** `Content-Type: text/event-stream`, `Cache-Control: no-cache`
-* **Event Payload Structure:**
-```
-event: ticket.message_added
-data: {"ticket_id": "BL-1001", "sender_role": "support", "timestamp": "2026-10-26T00:30:00Z"}
-
-event: ticket.status_changed
-data: {"ticket_id": "BL-1001", "old_status": "Open", "new_status": "In progress"}
-```
+Receives all `ticket.created`, `ticket.updated`, `ticket.classified`, and `message.created` events across all authors. Keepalive every 15 seconds.
 
 ---
 
-## 7. Data Models & Schemas
+## 8. Endpoint Summary Table
 
-### 7.1 Author Model
-```json
-{
-  "id": "AUTH001",
-  "name": "Priya Sharma",
-  "email": "priya.sharma@email.com",
-  "phone": "+91-98765-43210",
-  "city": "Mumbai",
-  "joined_date": "2023-03-15"
-}
-```
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/login` | None | Login, receive JWT |
+| `GET` | `/api/v1/auth/me` | Any | Current user profile |
+| `GET` | `/api/v1/me/books` | author | Author's books + royalty summary |
+| `GET` | `/api/v1/me/tickets` | author | Author's ticket list |
+| `POST` | `/api/v1/me/tickets` | author | Create new ticket |
+| `GET` | `/api/v1/me/tickets/{id}` | author | Ticket detail (no internal notes) |
+| `POST` | `/api/v1/me/tickets/{id}/messages` | author | Author reply |
+| `GET` | `/api/v1/me/stream` | author | SSE updates for this author |
+| `GET` | `/api/v1/admin/tickets` | admin | Filtered ticket queue |
+| `GET` | `/api/v1/admin/tickets/{id}` | admin | Full ticket detail |
+| `PATCH` | `/api/v1/admin/tickets/{id}` | admin | Update status / category / priority / assignee |
+| `POST` | `/api/v1/admin/tickets/{id}/messages` | admin | Send staff reply |
+| `POST` | `/api/v1/admin/tickets/{id}/notes` | admin | Internal note (hidden from author) |
+| `POST` | `/api/v1/admin/tickets/{id}/draft` | admin | Generate / retrieve AI draft |
+| `POST` | `/api/v1/admin/tickets/{id}/classify` | admin | Retry AI classification |
+| `GET` | `/api/v1/admin/stats` | admin | Dashboard aggregate stats |
+| `GET` | `/api/v1/admin/staff` | admin | List admins (for assignment dropdown) |
+| `GET` | `/api/v1/admin/stream` | admin | SSE updates for all tickets |
+| `GET` | `/health` | None | Liveness probe |
+| `GET` | `/health/ready` | None | DB readiness probe |
 
-### 7.2 Book Model
-```json
-{
-  "id": "BK001",
-  "author_id": "AUTH001",
-  "title": "Whispers of the Ganges",
-  "status": "Published & Live",
-  "isbn": "978-93-5400-101-1",
-  "total_royalty_earned": 12500.00,
-  "royalty_paid": 10000.00,
-  "royalty_pending": 2500.00
-}
-```
+---
 
-### 7.3 Ticket Model
-```json
-{
-  "id": "BL-1001",
-  "author_id": "AUTH001",
-  "book_id": "BK001",
-  "subject": "Missing Q3 royalty payment calculation",
-  "status": "In progress",
-  "priority": "Medium",
-  "category": "royalty_inquiry",
-  "ai_status": "completed",
-  "ai_draft": "string",
-  "created_at": "ISO 8601 string",
-  "updated_at": "ISO 8601 string"
-}
-```
+## 9. Demo Credentials
+
+| Role | Email | Password |
+|---|---|---|
+| Author | `priya.sharma@email.com` | `Author2024!` |
+| Author | `kavita.deshmukh@email.com` | `Author2024!` |
+| Author | Authors `AUTH001` – `AUTH010` | `Author2024!` |
+| Admin | `ops.admin@bookleaf.demo` | `Admin2024!` |
+| Admin | `support.lead@bookleaf.demo` | `Admin2024!` |
+
+Free-tier Render cold starts may take ~60 seconds on the first request.
+
+---
+
+## 10. Known Limitations
+
+- No author self-registration — accounts are created via the seed script.
+- SSE reconnect logic is client-side; the server does not replay missed events on reconnect.
+- `ai_confidence` is stored from the model's own output and should be treated as an indicator only, not a calibrated probability.
+- The production URL in this document is a placeholder — update it after deploying to Render.

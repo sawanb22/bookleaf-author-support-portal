@@ -560,9 +560,11 @@ async def seed_data():
     if len(authors_data) != 10:
         raise ValueError(f"Expected 10 authors, found {len(authors_data)}")
 
-    demo_password_hash = hash_password("demo")
-    assert demo_password_hash.startswith("$argon2id$"), "Password hash must be argon2id!"
-
+    # Different passwords for authors and admins (not "demo")
+    author_password_hash = hash_password("Author2024!")
+    admin_password_hash = hash_password("Admin2024!")
+    assert author_password_hash.startswith("$argon2id$"), "Password hash must be argon2id!"
+    assert admin_password_hash.startswith("$argon2id$"), "Password hash must be argon2id!"
     pool = await db.get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -597,7 +599,7 @@ async def seed_data():
                 bank_name, acct_last4 = AUTHOR_BANK_DETAILS.get(author_id, ("HDFC Bank", "1234"))
 
                 user_tuples.append((
-                    author_id, email, name, "author", demo_password_hash,
+                    author_id, email, name, "author", author_password_hash,
                     initials, "Author", bank_name, acct_last4
                 ))
                 author_tuples.append((
@@ -607,7 +609,7 @@ async def seed_data():
             for admin in ADMIN_USERS:
                 user_tuples.append((
                     admin["id"], admin["email"], admin["name"], admin["role"],
-                    demo_password_hash, admin["avatar_initials"], admin["title"],
+                    admin_password_hash, admin["avatar_initials"], admin["title"],
                     admin["bank_name"], admin["account_last4"]
                 ))
 
